@@ -1,21 +1,82 @@
 @import "tailwindcss";
 
-:root {
-  --background: #fdf6ec;
-  --foreground: #2d2d2d;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Noto Sans KR', Arial, sans-serif;
+  background: #050505;
+  color: #c0c0c0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  overflow-x: hidden;
 }
 
-@keyframes pulse-soft {
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+.panel {
+  background: #0d0d0d;
+  border: 1px solid #1c1c1c;
+}
+
+.panel-header {
+  background: #111;
+  border-bottom: 1px solid #1c1c1c;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.green { color: #00e676; }
+.red { color: #ff1744; }
+.blue { color: #448aff; }
+.yellow { color: #ffd740; }
+.dim { color: #444; }
+.white { color: #fff; }
+
+.dot-green { width: 6px; height: 6px; border-radius: 50%; background: #00e676; display: inline-block; }
+.dot-red { width: 6px; height: 6px; border-radius: 50%; background: #ff1744; display: inline-block; }
+
+@keyframes blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  50% { opacity: 0; }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px #00e67644; }
+  50% { box-shadow: 0 0 12px #00e67688; }
+}
+@keyframes slide-in {
+  from { transform: translateX(-4px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes float-node {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(2px, -2px); }
+  66% { transform: translate(-2px, 1px); }
+}
+@keyframes edge-flow {
+  0% { stroke-dashoffset: 60; opacity: 0.05; }
+  50% { opacity: 0.4; }
+  100% { stroke-dashoffset: 0; opacity: 0.05; }
+}
+@keyframes trophy-flash {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.5; }
 }
 
-.pulse-soft {
-  animation: pulse-soft 2s ease-in-out infinite;
+.blink { animation: blink 1s step-end infinite; }
+.pulse-green { animation: pulse-glow 2s ease-in-out infinite; }
+.slide-in { animation: slide-in 0.3s ease-out; }
+
+.bar-fill {
+  height: 100%;
+  position: absolute;
+  left: 0; top: 0;
+  opacity: 0.15;
+  transition: width 0.4s ease;
 }
