@@ -8,6 +8,7 @@ import AgentNetwork from './components/AgentNetwork';
 import ETFScreener from './components/ETFScreener';
 import TradeLog from './components/TradeLog';
 import SignalPanel from './components/SignalPanel';
+import TechIndicesDashboard from './components/TechIndicesDashboard';
 
 export default function Home() {
   return (
@@ -40,6 +41,9 @@ export default function Home() {
 
       {/* Execution row */}
       <ExecutionRow />
+
+      {/* Tech Indices Dashboard: RTY / SOX / AI Theme */}
+      <TechIndicesDashboard />
 
       {/* Network + bottom panels */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 220px', flex: 1, gap: 0, minHeight: 0 }}>
