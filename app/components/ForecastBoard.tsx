@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import BacktestPanel from './BacktestPanel';
 
 type Bias = 'STRONG LONG' | 'LONG' | 'NEUTRAL' | 'SHORT' | 'STRONG SHORT';
 type Direction = 'up' | 'down' | 'flat' | 'warn';
@@ -157,6 +158,9 @@ export default function ForecastBoard() {
           ))}
         </div>
       )}
+
+      {/* Backtest */}
+      {data && data.ok && <BacktestPanel />}
 
       {/* Disclaimer footer */}
       <div className="px-4 py-3 mt-auto" style={{ borderTop: '1px solid #1c1c1c', background: '#0a0a0a', color: '#555', fontSize: 9, lineHeight: 1.6 }}>
