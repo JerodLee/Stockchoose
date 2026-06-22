@@ -6,7 +6,7 @@
 //    즉 이 백테스트는 가격 기반 기술 코어(추세+모멘텀+자금흐름)의 성능만 측정한다.
 //  - 거래비용/슬리피지/펀딩비용 미반영. 미래편향(look-ahead) 없도록 t 시점까지만 사용.
 
-import { computeForecast, HORIZON_DAYS, type IndicatorInputs } from '@/app/lib/forecast';
+import { computeForecast, HORIZON_DAYS, type IndicatorInputs, type ForecastOptions } from '@/app/lib/forecast';
 
 export interface BacktestMetrics {
   /** 중립이 아닌(=베팅한) 신호 수 */
@@ -35,7 +35,11 @@ export interface BacktestInputs {
 
 const MIN_HISTORY = 60; // 지표 안정화에 필요한 최소 봉 수
 
-export function backtest(inp: BacktestInputs, horizon = HORIZON_DAYS): BacktestMetrics {
+export function backtest(
+  inp: BacktestInputs,
+  horizon = HORIZON_DAYS,
+  opts: ForecastOptions = {},
+): BacktestMetrics {
   const { closes, highs, lows, takerBuyRatioDaily } = inp;
   const n = closes.length;
 
@@ -63,7 +67,7 @@ export function backtest(inp: BacktestInputs, horizon = HORIZON_DAYS): BacktestM
       dominanceChange: 0,
     };
 
-    const f = computeForecast(inputs);
+    const f = computeForecast(inputs, opts);
     if (f.bias === 'NEUTRAL') continue;
 
     const fwdRet = ((closes[t + horizon] - closes[t]) / closes[t]) * 100;

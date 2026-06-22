@@ -21,11 +21,25 @@ interface BacktestResponse {
   overall: { signals: number; hits: number; hitRate: number };
   coins: CoinBacktest[];
 }
+interface PresetResult {
+  key: string;
+  label: string;
+  desc: string;
+  hitRate: number;
+  signals: number;
+  hits: number;
+}
+interface OptimizeResponse {
+  ok: boolean;
+  best: PresetResult | null;
+  presets: PresetResult[];
+}
 
 const rateColor = (r: number) => (r >= 55 ? '#00e676' : r >= 50 ? '#ffd740' : '#ff6b6b');
 
 export default function BacktestPanel() {
   const [data, setData] = useState<BacktestResponse | null>(null);
+  const [optimize, setOptimize] = useState<OptimizeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,9 +47,13 @@ export default function BacktestPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/backtest', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData((await res.json()) as BacktestResponse);
+      const [btRes, optRes] = await Promise.all([
+        fetch('/api/backtest', { cache: 'no-store' }),
+        fetch('/api/optimize', { cache: 'no-store' }),
+      ]);
+      if (!btRes.ok) throw new Error(`HTTP ${btRes.status}`);
+      setData((await btRes.json()) as BacktestResponse);
+      if (optRes.ok) setOptimize((await optRes.json()) as OptimizeResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : '알 수 없는 오류');
     } finally {
@@ -107,6 +125,29 @@ export default function BacktestPanel() {
               <span className="flex-1" style={{ color: '#333', fontSize: 8, textAlign: 'right' }}>{c.sampleDays}일 표본</span>
             </div>
           ))}
+
+          {/* 프리셋 튜닝 결과 */}
+          {optimize && optimize.ok && optimize.best && (
+            <div style={{ borderTop: '1px solid #1c1c1c', background: '#0a0a0a' }}>
+              <div className="px-3 py-2 flex items-center gap-2" style={{ fontSize: 10 }}>
+                <span style={{ color: '#555' }}>📊 프리셋 튜닝 — 과거 적중률 1위:</span>
+                <span style={{ color: '#00e676', fontWeight: 'bold' }}>{optimize.best.label}</span>
+                <span style={{ color: rateColor(optimize.best.hitRate), fontWeight: 'bold' }}>
+                  {optimize.best.hitRate.toFixed(1)}%
+                </span>
+              </div>
+              {optimize.presets.map((p, i) => (
+                <div key={p.key} className="px-3 py-1 flex items-center gap-2" style={{ borderTop: '1px solid #111', fontSize: 9 }}>
+                  <span style={{ minWidth: 14, color: '#444' }}>{i + 1}.</span>
+                  <span className="white" style={{ minWidth: 60 }}>{p.label}</span>
+                  <span style={{ minWidth: 50, textAlign: 'right', color: rateColor(p.hitRate), fontWeight: 'bold' }}>
+                    {p.hitRate.toFixed(1)}%
+                  </span>
+                  <span style={{ color: '#444', flex: 1 }}>{p.desc} · {p.signals}신호</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="px-3 py-2" style={{ color: '#444', fontSize: 8, lineHeight: 1.5 }}>
             ⚠ {data.note} 숏 평균은 가격 변화 기준이라 <b>음수일수록 숏에 유리</b>합니다.

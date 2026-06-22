@@ -10,7 +10,13 @@
 //
 // 일부 소스가 실패해도 해당 지표만 중립화하고 나머지로 계산한다(graceful degradation).
 
-import { computeForecast, type IndicatorInputs, type ForecastResult } from '@/app/lib/forecast';
+import {
+  computeForecast,
+  PRESETS,
+  DEFAULT_PRESET,
+  type IndicatorInputs,
+  type ForecastResult,
+} from '@/app/lib/forecast';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,7 +73,11 @@ interface SourceHealth {
   dominance: boolean;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const presetKey = new URL(request.url).searchParams.get('preset') ?? DEFAULT_PRESET;
+  const preset = PRESETS[presetKey] ?? PRESETS[DEFAULT_PRESET];
+  const forecastOpts = { weights: preset.weights, thresholds: preset.thresholds };
+
   const sources: SourceHealth = { klines: false, funding: false, fearGreed: false, dominance: false };
 
   // ── 시장 전역 데이터 (코인 공통) ──────────────────────────────
@@ -179,7 +189,7 @@ export async function GET() {
         dominanceChange,
       };
 
-      return { symbol: coin.symbol, name: coin.name, price, ...computeForecast(inputs) };
+      return { symbol: coin.symbol, name: coin.name, price, ...computeForecast(inputs, forecastOpts) };
     }),
   );
 
@@ -200,6 +210,7 @@ export async function GET() {
   return Response.json({
     ok,
     updatedAt: new Date().toISOString(),
+    preset: { key: preset.key, label: preset.label, desc: preset.desc },
     sources,
     summary: { regime, longs, shorts, neutrals, avgConfidence, total: valid.length },
     coins: results,

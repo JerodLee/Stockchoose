@@ -26,10 +26,17 @@ interface CoinForecast {
 interface ForecastResponse {
   ok: boolean;
   updatedAt: string;
+  preset: { key: string; label: string; desc: string };
   sources: { klines: boolean; funding: boolean; fearGreed: boolean; dominance: boolean };
   summary: { regime: 'LONG' | 'SHORT' | 'NEUTRAL'; longs: number; shorts: number; neutrals: number; avgConfidence: number; total: number };
   coins: CoinForecast[];
 }
+
+const PRESET_OPTIONS = [
+  { key: 'balanced', label: '균형' },
+  { key: 'trend', label: '추세추종' },
+  { key: 'meanrev', label: '역추세' },
+];
 
 const biasColor = (b: Bias) =>
   b === 'STRONG LONG' || b === 'LONG' ? '#00e676' : b === 'STRONG SHORT' || b === 'SHORT' ? '#ff1744' : '#ffd740';
@@ -48,6 +55,7 @@ export default function ForecastBoard() {
   const [data, setData] = useState<ForecastResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preset, setPreset] = useState('balanced');
   // 새로고침 버튼 / 60초 주기로 effect를 재실행시키는 트리거.
   const [nonce, setNonce] = useState(0);
   const reload = () => setNonce((n) => n + 1);
@@ -57,7 +65,7 @@ export default function ForecastBoard() {
     // fetch의 await 경계 안에서만 setState → effect 동기 렌더 유발 없음.
     async function run() {
       try {
-        const res = await fetch('/api/forecast', { cache: 'no-store' });
+        const res = await fetch(`/api/forecast?preset=${preset}`, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json: ForecastResponse = await res.json();
         if (!active) return;
@@ -75,7 +83,7 @@ export default function ForecastBoard() {
       active = false;
       clearInterval(id);
     };
-  }, [nonce]);
+  }, [nonce, preset]);
 
   const s = data?.summary;
   const regimeColor = s?.regime === 'LONG' ? '#00e676' : s?.regime === 'SHORT' ? '#ff1744' : '#ffd740';
@@ -100,6 +108,26 @@ export default function ForecastBoard() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Preset selector (튜닝) */}
+          <div className="flex items-center" style={{ border: '1px solid #1c1c1c', borderRadius: 2, overflow: 'hidden' }}>
+            {PRESET_OPTIONS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPreset(p.key)}
+                title={data?.preset?.key === p.key ? data.preset.desc : ''}
+                style={{
+                  fontSize: 9,
+                  padding: '3px 9px',
+                  cursor: 'pointer',
+                  background: preset === p.key ? '#161616' : 'transparent',
+                  color: preset === p.key ? '#00e676' : '#555',
+                  borderRight: '1px solid #1c1c1c',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           {data && (
             <span style={{ color: '#444', fontSize: 9 }}>
               UPDATED {new Date(data.updatedAt).toLocaleTimeString('ko-KR')}

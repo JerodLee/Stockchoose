@@ -8,13 +8,63 @@
 
 export const HORIZON_DAYS = 7;
 
-export const WEIGHTS = {
-  trend: 0.3,
-  momentum: 0.2,
-  funding: 0.2,
-  sentiment: 0.15,
-  flow: 0.15,
-} as const;
+export interface WeightConfig {
+  trend: number;
+  momentum: number;
+  funding: number;
+  sentiment: number;
+  flow: number;
+}
+
+export interface Thresholds {
+  /** |score| 이 값 이상이면 LONG/SHORT */
+  long: number;
+  /** |score| 이 값 이상이면 STRONG LONG/SHORT */
+  strongLong: number;
+}
+
+export interface Preset {
+  key: string;
+  label: string;
+  desc: string;
+  weights: WeightConfig;
+  thresholds: Thresholds;
+}
+
+// 프리셋: 가중치 합은 항상 1.
+export const PRESETS: Record<string, Preset> = {
+  balanced: {
+    key: 'balanced',
+    label: '균형',
+    desc: '추세·역신호 균형 (기본값)',
+    weights: { trend: 0.3, momentum: 0.2, funding: 0.2, sentiment: 0.15, flow: 0.15 },
+    thresholds: { long: 15, strongLong: 40 },
+  },
+  trend: {
+    key: 'trend',
+    label: '추세추종',
+    desc: '추세·모멘텀 중시, 역신호 약화',
+    weights: { trend: 0.4, momentum: 0.25, funding: 0.1, sentiment: 0.1, flow: 0.15 },
+    thresholds: { long: 12, strongLong: 35 },
+  },
+  meanrev: {
+    key: 'meanrev',
+    label: '역추세',
+    desc: '펀딩·심리 역신호 중시 (평균회귀)',
+    weights: { trend: 0.2, momentum: 0.15, funding: 0.3, sentiment: 0.25, flow: 0.1 },
+    thresholds: { long: 18, strongLong: 45 },
+  },
+};
+
+export const DEFAULT_PRESET = 'balanced';
+
+export interface ForecastOptions {
+  weights?: WeightConfig;
+  thresholds?: Thresholds;
+}
+
+/** 하위호환: 기존 기본 가중치 */
+export const WEIGHTS: WeightConfig = PRESETS.balanced.weights;
 
 export type Bias =
   | 'STRONG LONG'
@@ -227,11 +277,11 @@ function flowIndicator(inp: IndicatorInputs): IndicatorView {
 
 // ── 합성 ──────────────────────────────────────────────────────
 
-function biasFromScore(score: number): Bias {
-  if (score >= 40) return 'STRONG LONG';
-  if (score >= 15) return 'LONG';
-  if (score <= -40) return 'STRONG SHORT';
-  if (score <= -15) return 'SHORT';
+function biasFromScore(score: number, th: Thresholds): Bias {
+  if (score >= th.strongLong) return 'STRONG LONG';
+  if (score >= th.long) return 'LONG';
+  if (score <= -th.strongLong) return 'STRONG SHORT';
+  if (score <= -th.long) return 'SHORT';
   return 'NEUTRAL';
 }
 
@@ -249,7 +299,10 @@ function computeInvalidation(inp: IndicatorInputs, score: number): number | null
   return null;
 }
 
-export function computeForecast(inp: IndicatorInputs): ForecastResult {
+export function computeForecast(inp: IndicatorInputs, opts: ForecastOptions = {}): ForecastResult {
+  const weights = opts.weights ?? PRESETS[DEFAULT_PRESET].weights;
+  const thresholds = opts.thresholds ?? PRESETS[DEFAULT_PRESET].thresholds;
+
   const indicators: IndicatorView[] = [
     trendIndicator(inp),
     momentumIndicator(inp),
@@ -258,9 +311,9 @@ export function computeForecast(inp: IndicatorInputs): ForecastResult {
     flowIndicator(inp),
   ];
 
-  const raw = indicators.reduce((acc, ind) => acc + WEIGHTS[ind.key] * ind.value, 0);
+  const raw = indicators.reduce((acc, ind) => acc + weights[ind.key] * ind.value, 0);
   const score = Math.round(clamp(raw * 100, -100, 100));
-  const bias = biasFromScore(score);
+  const bias = biasFromScore(score, thresholds);
 
   // 신뢰도 = 합의도(같은 방향 지표 가중치 합) + 점수 강도.
   // 의도적으로 보수적(주로 50~75) — 1주 예측의 한계를 UI에 반영.
@@ -269,7 +322,7 @@ export function computeForecast(inp: IndicatorInputs): ForecastResult {
     dir === 0
       ? 0
       : indicators.reduce(
-          (a, ind) => a + (Math.sign(ind.value) === dir ? WEIGHTS[ind.key] : 0),
+          (a, ind) => a + (Math.sign(ind.value) === dir ? weights[ind.key] : 0),
           0,
         );
   const strength = clamp(Math.abs(score) / 60, 0, 1);
