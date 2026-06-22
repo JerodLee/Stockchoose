@@ -1,4 +1,5 @@
 import TopBar from './components/TopBar';
+import NavTabs from './components/NavTabs';
 import AgentCard from './components/AgentCard';
 import CandleChart from './components/CandleChart';
 import OrderBook from './components/OrderBook';
@@ -16,19 +17,7 @@ export default function Home() {
       <TopBar />
 
       {/* Nav tabs */}
-      <div style={{ background: '#0a0a0a', borderBottom: '1px solid #1c1c1c', display: 'flex', height: 28, flexShrink: 0 }}>
-        {['MY WALLET', 'HISTORY · LIBRARY', 'ACTIONS'].map((tab, i) => (
-          <div key={tab} style={{
-            padding: '0 12px', display: 'flex', alignItems: 'center',
-            borderRight: '1px solid #1c1c1c',
-            background: i === 0 ? '#111' : 'transparent',
-            borderBottom: i === 0 ? '2px solid #00e676' : '2px solid transparent',
-            color: i === 0 ? '#fff' : '#444', fontSize: 9, cursor: 'pointer',
-          }}>
-            {tab}
-          </div>
-        ))}
-      </div>
+      <NavTabs />
 
       {/* Main row: Agent | Chart | OrderBook | PL */}
       <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 200px 220px', flex: '0 0 320px', gap: 0, overflow: 'hidden' }}>
