@@ -1,92 +1,110 @@
 // GET /api/optimize
-// 각 가중치 프리셋을 동일한 과거 데이터로 백테스트해 적중률 순으로 정렬한다.
-// egress가 열리면 "실데이터 기준 최적 프리셋"을 경험적으로 고르기 위한 튜닝 도구.
+// 데이터 스누핑을 피하는 정직한 프리셋 선택:
+//   1) 인-샘플(앞 70%)에서 각 프리셋의 기대값을 측정해 "최적 프리셋"을 고르고
+//   2) 아웃-오브-샘플(뒤 30%)에서 모든 프리셋의 성능을 보고한다.
+// 즉 추천(best)은 IS로 정하되, 신뢰할 숫자는 OOS다.
 //
-// egress 허용 호스트: api.binance.com (klines 단일 소스)
+// egress 허용 호스트: api.binance.com, fapi.binance.com, api.alternative.me
 
-import { backtest } from '@/app/lib/backtest';
+import { backtest, type BacktestInputs } from '@/app/lib/backtest';
 import { PRESETS } from '@/app/lib/forecast';
+import { loadHistory, loadFearGreedMap } from '@/app/lib/marketdata';
 
 export const dynamic = 'force-dynamic';
 
 const COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT'];
-const SPOT = 'https://api.binance.com';
-const REVALIDATE = 60 * 30;
+const SPLIT = 0.7;
+const MIN_HISTORY = 60;
 
-type RawKline = [number, string, string, string, string, string, number, string, number, string, string, string];
-
-interface Series {
-  closes: number[];
-  highs: number[];
-  lows: number[];
-  takerBuyRatioDaily: number[];
-}
-
-interface PresetResult {
+interface PresetEval {
   key: string;
   label: string;
   desc: string;
-  hitRate: number;
-  signals: number;
-  hits: number;
+  // 인-샘플(프리셋 선택용)
+  isExpectancy: number;
+  isSignals: number;
+  // 아웃-오브-샘플(보고용)
+  oosExpectancy: number;
+  oosHitRate: number;
+  oosHitRateCI: [number, number];
+  oosSignals: number;
 }
 
 export async function GET() {
-  // 코인별 시계열을 한 번만 받아 모든 프리셋에 재사용.
-  const series: Series[] = [];
-  let anyOk = false;
+  let fngMap: Map<number, number>;
+  try {
+    fngMap = await loadFearGreedMap();
+  } catch {
+    fngMap = new Map();
+  }
 
+  const series: BacktestInputs[] = [];
   await Promise.all(
     COINS.map(async (symbol) => {
       try {
-        const res = await fetch(`${SPOT}/api/v3/klines?symbol=${symbol}&interval=1d&limit=1000`, {
-          next: { revalidate: REVALIDATE },
-          headers: { Accept: 'application/json' },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const rows = (await res.json()) as RawKline[];
-        series.push({
-          closes: rows.map((k) => Number(k[4])),
-          highs: rows.map((k) => Number(k[2])),
-          lows: rows.map((k) => Number(k[3])),
-          takerBuyRatioDaily: rows.map((k) => {
-            const vol = Number(k[5]);
-            return vol > 0 ? Number(k[9]) / vol : 0.5;
-          }),
-        });
-        anyOk = true;
+        series.push(await loadHistory(symbol, fngMap));
       } catch {
-        // 해당 코인 스킵
+        /* skip */
       }
     }),
   );
+  const anyOk = series.length > 0;
 
-  const results: PresetResult[] = Object.values(PRESETS).map((preset) => {
-    let signals = 0;
-    let hits = 0;
+  const presets = Object.values(PRESETS).map((preset): PresetEval => {
+    const opts = { weights: preset.weights, thresholds: preset.thresholds };
+    let isSum = 0;
+    let isSig = 0;
+    let oosSum = 0;
+    let oosSig = 0;
+    let oosHits = 0;
+
     for (const s of series) {
-      const m = backtest(s, 7, { weights: preset.weights, thresholds: preset.thresholds });
-      signals += m.signals;
-      hits += m.hits;
+      const n = s.closes.length;
+      const split = Math.floor(n * SPLIT);
+      const is = backtest(s, 7, opts, { from: MIN_HISTORY, to: split });
+      const oos = backtest(s, 7, opts, { from: split, to: n });
+      isSum += is.expectancy * is.signals;
+      isSig += is.signals;
+      oosSum += oos.expectancy * oos.signals;
+      oosSig += oos.signals;
+      oosHits += oos.hits;
     }
+
+    // OOS 합산 적중률의 Wilson CI
+    const ci = wilson(oosHits, oosSig);
     return {
       key: preset.key,
       label: preset.label,
       desc: preset.desc,
-      hitRate: signals > 0 ? (hits / signals) * 100 : 0,
-      signals,
-      hits,
+      isExpectancy: isSig > 0 ? isSum / isSig : 0,
+      isSignals: isSig,
+      oosExpectancy: oosSig > 0 ? oosSum / oosSig : 0,
+      oosHitRate: oosSig > 0 ? (oosHits / oosSig) * 100 : 0,
+      oosHitRateCI: ci,
+      oosSignals: oosSig,
     };
   });
 
-  results.sort((a, b) => b.hitRate - a.hitRate);
+  // 추천: 인-샘플 기대값 최고. (보고는 OOS로)
+  const best = [...presets].sort((a, b) => b.isExpectancy - a.isExpectancy)[0] ?? null;
 
   return Response.json({
     ok: anyOk,
     updatedAt: new Date().toISOString(),
     horizonDays: 7,
-    note: '동일 과거 데이터에 각 프리셋 적용. 가격 기반 기술 코어만 평가(펀딩·심리 제외).',
-    best: results[0] ?? null,
-    presets: results,
+    note:
+      '인-샘플(앞 70%)로 프리셋을 고르고 아웃-오브-샘플(뒤 30%)로 평가. ' +
+      'IS 성능은 과적합되므로 신뢰할 숫자는 OOS다.',
+    best,
+    presets,
   });
+}
+
+function wilson(hits: number, n: number, z = 1.96): [number, number] {
+  if (n === 0) return [0, 0];
+  const p = hits / n;
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const margin = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
+  return [Math.max(0, (center - margin) * 100), Math.min(100, (center + margin) * 100)];
 }

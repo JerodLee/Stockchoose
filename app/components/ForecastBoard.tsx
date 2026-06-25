@@ -4,6 +4,7 @@ import BacktestPanel from './BacktestPanel';
 
 type Bias = 'STRONG LONG' | 'LONG' | 'NEUTRAL' | 'SHORT' | 'STRONG SHORT';
 type Direction = 'up' | 'down' | 'flat' | 'warn';
+type Strength = 'low' | 'med' | 'high';
 
 interface IndicatorView {
   key: string;
@@ -12,13 +13,18 @@ interface IndicatorView {
   direction: Direction;
   detail: string;
 }
+interface Conviction {
+  agree: number;
+  total: number;
+  strength: Strength;
+}
 interface CoinForecast {
   symbol: string;
   name: string;
   price: number | null;
   bias: Bias;
   score: number;
-  confidence: number;
+  conviction: Conviction;
   horizonDays: number;
   indicators: IndicatorView[];
   invalidation: number | null;
@@ -27,8 +33,8 @@ interface ForecastResponse {
   ok: boolean;
   updatedAt: string;
   preset: { key: string; label: string; desc: string };
-  sources: { klines: boolean; funding: boolean; fearGreed: boolean; dominance: boolean };
-  summary: { regime: 'LONG' | 'SHORT' | 'NEUTRAL'; longs: number; shorts: number; neutrals: number; avgConfidence: number; total: number };
+  sources: { klines: boolean; funding: boolean; fearGreed: boolean };
+  summary: { regime: 'LONG' | 'SHORT' | 'NEUTRAL'; longs: number; shorts: number; neutrals: number; total: number; caveat: string };
   coins: CoinForecast[];
 }
 
@@ -44,6 +50,7 @@ const biasLabel = (b: Bias) =>
   b === 'STRONG LONG' ? '강한 롱' : b === 'LONG' ? '롱 우위' : b === 'STRONG SHORT' ? '강한 숏' : b === 'SHORT' ? '숏 우위' : '관망';
 const dirSymbol = (d: Direction) => (d === 'up' ? '↑' : d === 'down' ? '↓' : d === 'warn' ? '⚠' : '→');
 const dirColor = (d: Direction) => (d === 'up' ? '#00e676' : d === 'down' ? '#ff1744' : d === 'warn' ? '#ffd740' : '#666');
+const strengthLabel = (s: Strength) => (s === 'high' ? '강' : s === 'med' ? '중' : '약');
 
 function fmtPrice(p: number | null) {
   if (p == null) return '—';
@@ -102,8 +109,12 @@ export default function ForecastBoard() {
           )}
           {s && (
             <span style={{ color: '#555', fontSize: 11 }}>
-              ({s.longs} LONG / {s.neutrals} NEUTRAL / {s.shorts} SHORT) · 평균 신뢰도{' '}
-              <span style={{ color: '#fff' }}>{s.avgConfidence}%</span>
+              ({s.longs} LONG / {s.neutrals} NEUTRAL / {s.shorts} SHORT)
+            </span>
+          )}
+          {s && (
+            <span title={s.caveat} style={{ color: '#7a6a2a', fontSize: 9, border: '1px solid #5a4a1a', padding: '1px 6px', borderRadius: 2 }}>
+              ⚠ 상관 높음 ≈ 단일 베팅
             </span>
           )}
         </div>
@@ -148,9 +159,8 @@ export default function ForecastBoard() {
           <span style={{ color: '#444' }}>DATA SOURCES:</span>
           {[
             ['Binance klines', data.sources.klines],
-            ['Funding/OI', data.sources.funding],
+            ['Funding', data.sources.funding],
             ['Fear&Greed', data.sources.fearGreed],
-            ['Dominance', data.sources.dominance],
           ].map(([label, ok]) => (
             <span key={label as string} style={{ color: ok ? '#00e676' : '#ff1744' }}>
               {ok ? '●' : '○'} {label as string}
@@ -172,7 +182,7 @@ export default function ForecastBoard() {
           <div style={{ color: '#ff6b6b', fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>⚠ 실데이터 소스에 연결할 수 없습니다</div>
           <div style={{ color: '#888', fontSize: 10, lineHeight: 1.6 }}>
             Binance 공개 API에 접근하지 못했습니다. 실행 환경의 <b>네트워크 egress 허용목록</b>에 다음 호스트를 추가해야 합니다:
-            <code style={{ color: '#ffd740' }}> api.binance.com, fapi.binance.com, api.alternative.me, api.coingecko.com</code>.
+            <code style={{ color: '#ffd740' }}> api.binance.com, fapi.binance.com, api.alternative.me</code>.
             또한 일부 서버 리전은 Binance가 차단(HTTP 451)할 수 있습니다.
           </div>
         </div>
@@ -192,8 +202,9 @@ export default function ForecastBoard() {
 
       {/* Disclaimer footer */}
       <div className="px-4 py-3 mt-auto" style={{ borderTop: '1px solid #1c1c1c', background: '#0a0a0a', color: '#555', fontSize: 9, lineHeight: 1.6 }}>
-        ⚠ 본 지표는 <b>확률적 롱숏 편향</b>을 제시할 뿐 가격 예측이나 투자 조언이 아닙니다. 1주 horizon에서 방향 적중률은 구조적으로
-        50~55% 수준이며, 각 카드의 <b>무효화(invalidation)</b> 조건을 반드시 함께 확인하세요. 데이터: Binance 공개 API · Alternative.me F&G.
+        ⚠ 본 지표는 <b>확률적 롱숏 편향</b>을 제시할 뿐 가격 예측이나 투자 조언이 아닙니다. <b>「합의/강도」는 확률이 아닙니다</b>(캘리브레이션 안 됨).
+        1주 horizon에서 방향 적중률은 구조적으로 50~55% 수준이고, 적중률보다 <b>비용 차감 기대값</b>이 수익성의 척도입니다. 각 카드의
+        <b> 무효화(invalidation)</b> 조건을 함께 확인하세요. 데이터: Binance 공개 API · Alternative.me F&G.
       </div>
     </div>
   );
@@ -216,7 +227,18 @@ function CoinCard({ c }: { c: CoinForecast }) {
           <span style={{ color, fontSize: 11, fontWeight: 'bold', border: `1px solid ${color}55`, padding: '2px 8px', borderRadius: 2 }}>
             {biasLabel(c.bias)}
           </span>
-          <span style={{ color, fontSize: 13, fontWeight: 'bold', minWidth: 34, textAlign: 'right' }}>{c.confidence}%</span>
+          {/* 확신도: 확률(%) 아님. 합의 지표 수 + 강도(서수) */}
+          <span
+            title={`${c.conviction.agree}/${c.conviction.total} 지표 합의 · 강도 ${strengthLabel(c.conviction.strength)} (확률 아님)`}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}
+          >
+            <span style={{ letterSpacing: 1, fontSize: 9 }}>
+              {Array.from({ length: c.conviction.total }, (_, i) => (
+                <span key={i} style={{ color: i < c.conviction.agree ? color : '#333' }}>●</span>
+              ))}
+            </span>
+            <span style={{ color: '#666', fontSize: 8 }}>합의 {c.conviction.agree}/{c.conviction.total} · 강도 {strengthLabel(c.conviction.strength)}</span>
+          </span>
         </div>
       </div>
 

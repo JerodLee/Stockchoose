@@ -7,35 +7,44 @@ interface CoinBacktest {
   signals: number;
   hits: number;
   hitRate: number;
-  avgLongRet: number;
-  avgShortRet: number;
+  hitRateCI: [number, number];
+  expectancy: number;
+  grossExpectancy: number;
   longSignals: number;
   shortSignals: number;
+  avgLongRet: number;
+  avgShortRet: number;
   sampleDays: number;
 }
 interface BacktestResponse {
   ok: boolean;
   updatedAt: string;
   horizonDays: number;
+  costPct: number;
   note: string;
-  overall: { signals: number; hits: number; hitRate: number };
+  overall: { signals: number; hits: number; hitRate: number; expectancy: number };
   coins: CoinBacktest[];
 }
-interface PresetResult {
+interface PresetEval {
   key: string;
   label: string;
   desc: string;
-  hitRate: number;
-  signals: number;
-  hits: number;
+  isExpectancy: number;
+  isSignals: number;
+  oosExpectancy: number;
+  oosHitRate: number;
+  oosHitRateCI: [number, number];
+  oosSignals: number;
 }
 interface OptimizeResponse {
   ok: boolean;
-  best: PresetResult | null;
-  presets: PresetResult[];
+  best: PresetEval | null;
+  presets: PresetEval[];
 }
 
 const rateColor = (r: number) => (r >= 55 ? '#00e676' : r >= 50 ? '#ffd740' : '#ff6b6b');
+const expColor = (e: number) => (e > 0.05 ? '#00e676' : e < -0.05 ? '#ff1744' : '#ffd740');
+const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 
 export default function BacktestPanel() {
   const [data, setData] = useState<BacktestResponse | null>(null);
@@ -64,7 +73,7 @@ export default function BacktestPanel() {
   return (
     <div className="mx-4 mb-4 panel" style={{ overflow: 'hidden' }}>
       <div className="panel-header justify-between">
-        <span>백테스트 · 과거 1주 방향 적중률 (기술 코어)</span>
+        <span>백테스트 · 비겹침 · 비용 차감 (라이브 모델 동일 검증)</span>
         <button
           onClick={run}
           disabled={loading}
@@ -76,8 +85,8 @@ export default function BacktestPanel() {
 
       {!data && !loading && !error && (
         <div className="px-3 py-3" style={{ color: '#555', fontSize: 10, lineHeight: 1.6 }}>
-          과거 일봉(최대 1000봉)으로 워크포워드 백테스트를 실행해 실제 방향 적중률을 측정합니다.
-          50%를 의미 있게 넘으면 통계적 엣지가 있는 것이며, 1주 horizon에서는 55% 안팎이 현실적 상한입니다.
+          과거 일봉(최대 1000봉) + 과거 F&G·펀딩으로 <b>라이브 모델 그대로</b> 워크포워드 백테스트를 실행합니다.
+          표본은 7일 비겹침으로 잡고 왕복비용을 차감합니다. <b>헤드라인은 비용 차감 기대값</b>이며, 적중률은 보조 지표(95% 신뢰구간 동반)입니다.
         </div>
       )}
 
@@ -86,71 +95,84 @@ export default function BacktestPanel() {
       {data && data.ok && (
         <>
           {/* overall */}
-          <div className="px-3 py-3 flex items-center gap-4" style={{ borderBottom: '1px solid #1c1c1c', background: '#0a0a0a' }}>
+          <div className="px-3 py-3 flex items-center gap-5 flex-wrap" style={{ borderBottom: '1px solid #1c1c1c', background: '#0a0a0a' }}>
             <div>
-              <div style={{ color: '#555', fontSize: 9 }}>전체 적중률</div>
-              <div style={{ color: rateColor(data.overall.hitRate), fontSize: 26, fontWeight: 'bold' }}>
+              <div style={{ color: '#555', fontSize: 9 }}>신호당 기대값 (비용 {data.costPct}% 차감)</div>
+              <div style={{ color: expColor(data.overall.expectancy), fontSize: 26, fontWeight: 'bold' }}>
+                {pct(data.overall.expectancy)}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#555', fontSize: 9 }}>방향 적중률 (보조)</div>
+              <div style={{ color: rateColor(data.overall.hitRate), fontSize: 18, fontWeight: 'bold' }}>
                 {data.overall.hitRate.toFixed(1)}%
               </div>
             </div>
             <div style={{ color: '#555', fontSize: 9, lineHeight: 1.6 }}>
-              표본 신호 <span style={{ color: '#fff' }}>{data.overall.signals.toLocaleString()}</span>건 · 적중{' '}
-              <span style={{ color: '#fff' }}>{data.overall.hits.toLocaleString()}</span>건<br />
+              비겹침 표본 <span style={{ color: '#fff' }}>{data.overall.signals.toLocaleString()}</span>건<br />
               Horizon {data.horizonDays}일 · 5개 코인 합산
             </div>
           </div>
 
           {/* per coin table */}
           <div className="px-3 py-1 flex gap-2" style={{ fontSize: 9, color: '#333', borderBottom: '1px solid #111' }}>
-            <span style={{ minWidth: 44 }}>COIN</span>
-            <span style={{ minWidth: 56, textAlign: 'right' }}>적중률</span>
-            <span style={{ minWidth: 56, textAlign: 'right' }}>신호수</span>
-            <span style={{ minWidth: 60, textAlign: 'right' }}>롱 평균</span>
-            <span style={{ minWidth: 60, textAlign: 'right' }}>숏 평균</span>
+            <span style={{ minWidth: 40 }}>COIN</span>
+            <span style={{ minWidth: 66, textAlign: 'right' }}>기대값</span>
+            <span style={{ minWidth: 50, textAlign: 'right' }}>적중률</span>
+            <span style={{ minWidth: 96, textAlign: 'right' }}>95% CI</span>
+            <span style={{ minWidth: 40, textAlign: 'right' }}>신호</span>
             <span className="flex-1" />
           </div>
           {data.coins.map((c) => (
             <div key={c.symbol} className="px-3 py-1 flex gap-2 items-center" style={{ borderBottom: '1px solid #111', fontSize: 10 }}>
-              <span className="white" style={{ minWidth: 44, fontWeight: 'bold' }}>{c.name}</span>
-              <span style={{ minWidth: 56, textAlign: 'right', color: rateColor(c.hitRate), fontWeight: 'bold' }}>
-                {c.signals > 0 ? `${c.hitRate.toFixed(1)}%` : '—'}
+              <span className="white" style={{ minWidth: 40, fontWeight: 'bold' }}>{c.name}</span>
+              <span style={{ minWidth: 66, textAlign: 'right', color: expColor(c.expectancy), fontWeight: 'bold' }}>
+                {c.signals > 0 ? pct(c.expectancy) : '—'}
               </span>
-              <span style={{ minWidth: 56, textAlign: 'right', color: '#888' }}>{c.signals}</span>
-              <span style={{ minWidth: 60, textAlign: 'right', color: c.avgLongRet >= 0 ? '#00e676' : '#ff1744' }}>
-                {c.longSignals > 0 ? `${c.avgLongRet >= 0 ? '+' : ''}${c.avgLongRet.toFixed(1)}%` : '—'}
+              <span style={{ minWidth: 50, textAlign: 'right', color: rateColor(c.hitRate) }}>
+                {c.signals > 0 ? `${c.hitRate.toFixed(0)}%` : '—'}
               </span>
-              <span style={{ minWidth: 60, textAlign: 'right', color: c.avgShortRet <= 0 ? '#00e676' : '#ff1744' }}>
-                {c.shortSignals > 0 ? `${c.avgShortRet >= 0 ? '+' : ''}${c.avgShortRet.toFixed(1)}%` : '—'}
+              <span style={{ minWidth: 96, textAlign: 'right', color: '#666', fontSize: 9 }}>
+                {c.signals > 0 ? `${c.hitRateCI[0].toFixed(0)}–${c.hitRateCI[1].toFixed(0)}%` : '—'}
               </span>
-              <span className="flex-1" style={{ color: '#333', fontSize: 8, textAlign: 'right' }}>{c.sampleDays}일 표본</span>
+              <span style={{ minWidth: 40, textAlign: 'right', color: '#888' }}>{c.signals}</span>
+              <span className="flex-1" style={{ color: '#333', fontSize: 8, textAlign: 'right' }}>{c.sampleDays}표본</span>
             </div>
           ))}
 
-          {/* 프리셋 튜닝 결과 */}
+          {/* 프리셋 튜닝: IS 선택 → OOS 보고 */}
           {optimize && optimize.ok && optimize.best && (
             <div style={{ borderTop: '1px solid #1c1c1c', background: '#0a0a0a' }}>
-              <div className="px-3 py-2 flex items-center gap-2" style={{ fontSize: 10 }}>
-                <span style={{ color: '#555' }}>📊 프리셋 튜닝 — 과거 적중률 1위:</span>
+              <div className="px-3 py-2 flex items-center gap-2 flex-wrap" style={{ fontSize: 10 }}>
+                <span style={{ color: '#555' }}>📊 프리셋 튜닝 (인-샘플 70% 선택 → 아웃-오브-샘플 30% 검증) — 추천:</span>
                 <span style={{ color: '#00e676', fontWeight: 'bold' }}>{optimize.best.label}</span>
-                <span style={{ color: rateColor(optimize.best.hitRate), fontWeight: 'bold' }}>
-                  {optimize.best.hitRate.toFixed(1)}%
+                <span style={{ color: '#555' }}>OOS 기대값</span>
+                <span style={{ color: expColor(optimize.best.oosExpectancy), fontWeight: 'bold' }}>
+                  {pct(optimize.best.oosExpectancy)}
                 </span>
               </div>
-              {optimize.presets.map((p, i) => (
+              <div className="px-3 py-1 flex gap-2" style={{ fontSize: 8, color: '#333', borderTop: '1px solid #111' }}>
+                <span style={{ minWidth: 60 }}>프리셋</span>
+                <span style={{ minWidth: 72, textAlign: 'right' }}>OOS 기대값</span>
+                <span style={{ minWidth: 60, textAlign: 'right' }}>OOS 적중</span>
+                <span style={{ minWidth: 80, textAlign: 'right' }}>OOS 95%CI</span>
+                <span className="flex-1" />
+              </div>
+              {optimize.presets.map((p) => (
                 <div key={p.key} className="px-3 py-1 flex items-center gap-2" style={{ borderTop: '1px solid #111', fontSize: 9 }}>
-                  <span style={{ minWidth: 14, color: '#444' }}>{i + 1}.</span>
                   <span className="white" style={{ minWidth: 60 }}>{p.label}</span>
-                  <span style={{ minWidth: 50, textAlign: 'right', color: rateColor(p.hitRate), fontWeight: 'bold' }}>
-                    {p.hitRate.toFixed(1)}%
-                  </span>
-                  <span style={{ color: '#444', flex: 1 }}>{p.desc} · {p.signals}신호</span>
+                  <span style={{ minWidth: 72, textAlign: 'right', color: expColor(p.oosExpectancy), fontWeight: 'bold' }}>{pct(p.oosExpectancy)}</span>
+                  <span style={{ minWidth: 60, textAlign: 'right', color: rateColor(p.oosHitRate) }}>{p.oosHitRate.toFixed(0)}%</span>
+                  <span style={{ minWidth: 80, textAlign: 'right', color: '#666' }}>{p.oosHitRateCI[0].toFixed(0)}–{p.oosHitRateCI[1].toFixed(0)}%</span>
+                  <span style={{ color: '#444', flex: 1, fontSize: 8 }}>{p.oosSignals}신호</span>
                 </div>
               ))}
             </div>
           )}
 
           <div className="px-3 py-2" style={{ color: '#444', fontSize: 8, lineHeight: 1.5 }}>
-            ⚠ {data.note} 숏 평균은 가격 변화 기준이라 <b>음수일수록 숏에 유리</b>합니다.
+            ⚠ {data.note} 종목은 현재 시총 상위 5개라 <b>생존편향</b>이 있고, 코인 간 상관이 높아 표본이 실제보다 독립적이지 않습니다.
+            과거 성과가 미래를 보장하지 않습니다.
           </div>
         </>
       )}

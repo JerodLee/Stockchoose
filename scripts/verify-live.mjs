@@ -2,16 +2,15 @@
 // 실데이터 소스 연결 점검 스크립트.
 //
 // egress 허용목록에 아래 호스트를 추가한 뒤 실행하세요:
-//   api.binance.com, fapi.binance.com, api.alternative.me, api.coingecko.com
+//   api.binance.com, fapi.binance.com, api.alternative.me
 //
 // 사용법:  node scripts/verify-live.mjs
 
 const CHECKS = [
-  ['Binance klines (추세/모멘텀/흐름)', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=2'],
-  ['Binance 펀딩비 (펀딩 지표)', 'https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT'],
-  ['Binance 미결제약정', 'https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1d&limit=2'],
-  ['Alternative.me 공포·탐욕 (심리)', 'https://api.alternative.me/fng/?limit=1'],
-  ['CoinGecko 도미넌스 (심리 보정)', 'https://api.coingecko.com/api/v3/global'],
+  ['Binance klines (추세/모멘텀/매수압력)', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=2'],
+  ['Binance 현재 펀딩비 (라이브)', 'https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT'],
+  ['Binance 펀딩 히스토리 (백테스트)', 'https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=3'],
+  ['Alternative.me F&G 히스토리 (심리/백테스트)', 'https://api.alternative.me/fng/?limit=3'],
 ];
 
 let pass = 0;

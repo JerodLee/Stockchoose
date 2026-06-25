@@ -1,12 +1,30 @@
-// 1주(약 5~7일) 코인 롱숏 트렌드 편향 산출 로직.
+// 1주(약 7일) 코인 롱숏 트렌드 편향 산출 로직.
 //
 // 설계 원칙:
-//  - "정확히 맞추는 예측기"가 아니라 "확률적 편향 + 신뢰도 + 무효화 조건"을 출력한다.
-//  - 데이터 소스(Binance 등)와 분리한다. 이 파일은 순수 계산만 담당하며,
-//    입력(IndicatorInputs)만 바꾸면 시뮬레이션/실데이터 어느 쪽이든 동작한다.
-//  - 5개 지표를 가중 합산해 -100 ~ +100 점수를 만든다. (+ 롱 / - 숏)
+//  - "정확히 맞추는 예측기"가 아니라 "확률적 편향"을 출력한다. 1주 horizon의
+//    방향 적중률은 구조적으로 50~55%가 한계이므로, 확률처럼 보이는 % 신뢰도 대신
+//    "지표 합의도(서수) + 강도(서수)"만 제시한다. (캘리브레이션되지 않은 수치를
+//    퍼센트로 표기하지 않는다.)
+//  - 데이터 소스와 분리한다. 이 파일은 순수 계산만 담당하며, 입력만 바꾸면
+//    라이브/백테스트가 동일하게 동작한다. (백테스트가 라이브 모델을 그대로 검증)
+//  - 모든 입력은 일별 과거 데이터로 재현 가능한 것만 사용한다. (도미넌스·OI 제외)
 
 export const HORIZON_DAYS = 7;
+
+// ── 모델 상수 (정규화·포화 임계) ────────────────────────────────
+// 경험적 근거가 약한 손튜닝 값들이므로 한곳에 모아 명시·조정 가능하게 둔다.
+export const MODEL_CONFIG = {
+  trendSlopeSatPct: 6, // 20EMA 5봉 기울기 ±6%에서 포화
+  trendMaSatPct: 15, // 200일선 대비 위치 ±15%에서 포화
+  rsiSat: 25, // RSI 50±25에서 포화
+  rsiExtremeDamp: 0.5, // RSI>80 또는 <20이면 절반 감쇠(되돌림 위험)
+  macdSatPct: 1, // MACD히스토그램/가격 ±1%에서 포화
+  fundingSat: 0.0005, // 펀딩비 0.05%에서 포화
+  fundingCrowded: 0.0003, // 0.03% 초과면 쏠림 경고
+  fgSat: 50, // F&G 50±50 (즉 0~100 전체)
+  flowSat: 0.08, // 테이커매수비율 0.5±0.08(42~58%)에서 포화
+  regimeDampMax: 0.6, // 추세가 최대일 때 역신호를 최대 60% 감쇠
+} as const;
 
 export interface WeightConfig {
   trend: number;
@@ -63,20 +81,15 @@ export interface ForecastOptions {
   thresholds?: Thresholds;
 }
 
-/** 하위호환: 기존 기본 가중치 */
+/** 하위호환: 기본 가중치 */
 export const WEIGHTS: WeightConfig = PRESETS.balanced.weights;
 
-export type Bias =
-  | 'STRONG LONG'
-  | 'LONG'
-  | 'NEUTRAL'
-  | 'SHORT'
-  | 'STRONG SHORT';
-
+export type Bias = 'STRONG LONG' | 'LONG' | 'NEUTRAL' | 'SHORT' | 'STRONG SHORT';
 export type Direction = 'up' | 'down' | 'flat' | 'warn';
+export type Strength = 'low' | 'med' | 'high';
 
 export interface IndicatorView {
-  key: keyof typeof WEIGHTS;
+  key: keyof WeightConfig;
   label: string;
   /** 부호 있는 기여도, -1 ~ +1 */
   value: number;
@@ -84,12 +97,23 @@ export interface IndicatorView {
   detail: string;
 }
 
+/**
+ * 확신도(서수). 퍼센트가 아니라 "몇 개 지표가 같은 방향인가 + 점수 강도"만 제시한다.
+ * 이 값은 적중 확률이 아니다(캘리브레이션되지 않음).
+ */
+export interface Conviction {
+  /** 합성 방향과 같은 부호인 지표 수 (0~5) */
+  agree: number;
+  total: number;
+  /** |score| 기반 강도 */
+  strength: Strength;
+}
+
 export interface ForecastResult {
   bias: Bias;
   /** -100 ~ +100 (+ 롱 / - 숏) */
   score: number;
-  /** 0 ~ 100, 지표 합의도 기반 */
-  confidence: number;
+  conviction: Conviction;
   horizonDays: number;
   indicators: IndicatorView[];
   /** 종가 이탈 시 시나리오가 깨지는 가격 */
@@ -107,14 +131,8 @@ export interface IndicatorInputs {
   fundingRate: number;
   /** 최근 윈도우 평균 펀딩비 */
   avgFunding: number;
-  /** 미결제약정(OI) 변화율, % */
-  oiChangePct: number;
   /** 공포·탐욕 지수 0~100 */
   fearGreed: number;
-  /** 시장 코인 여부(알트는 BTC 도미넌스 상승에 불리) */
-  isBitcoin: boolean;
-  /** BTC 도미넌스 변화 추정치, % (양수=도미넌스 상승) */
-  dominanceChange: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -174,15 +192,12 @@ function trendIndicator(inp: IndicatorInputs): IndicatorView {
       ? closes.slice(-200).reduce((a, b) => a + b, 0) / 200
       : closes.reduce((a, b) => a + b, 0) / closes.length;
 
-  // 20EMA 기울기(최근 5봉) — % 단위
   const slopeRef = e20[Math.max(0, e20.length - 6)];
   const slopePct = slopeRef ? ((e20[e20.length - 1] - slopeRef) / slopeRef) * 100 : 0;
-  // 200일선 대비 위치 — % 단위
   const maPct = ma200 ? ((last - ma200) / ma200) * 100 : 0;
 
-  // 기울기 ±6%에서, 위치 ±15%에서 포화
-  const slopeScore = clamp(slopePct / 6, -1, 1);
-  const maScore = clamp(maPct / 15, -1, 1);
+  const slopeScore = clamp(slopePct / MODEL_CONFIG.trendSlopeSatPct, -1, 1);
+  const maScore = clamp(maPct / MODEL_CONFIG.trendMaSatPct, -1, 1);
   const value = clamp(0.6 * slopeScore + 0.4 * maScore, -1, 1);
 
   return {
@@ -202,11 +217,9 @@ function momentumIndicator(inp: IndicatorInputs): IndicatorView {
   const hist = macdHistogram(closes);
   const last = closes[closes.length - 1] || 1;
 
-  // RSI 50 기준, ±25에서 포화. 단 과열(>80)·과매도(<20)는 1주 되돌림 위험 → 절반 감쇠.
-  let rsiScore = clamp((r - 50) / 25, -1, 1);
-  if (r > 80 || r < 20) rsiScore *= 0.5;
-  // MACD 히스토그램을 가격 대비 정규화 (±1% 에서 포화)
-  const histScore = clamp((hist / last) * 100, -1, 1);
+  let rsiScore = clamp((r - 50) / MODEL_CONFIG.rsiSat, -1, 1);
+  if (r > 80 || r < 20) rsiScore *= MODEL_CONFIG.rsiExtremeDamp;
+  const histScore = clamp((hist / last) * 100 / MODEL_CONFIG.macdSatPct, -1, 1);
   const value = clamp(0.6 * rsiScore + 0.4 * histScore, -1, 1);
 
   return {
@@ -219,32 +232,25 @@ function momentumIndicator(inp: IndicatorInputs): IndicatorView {
 }
 
 function fundingIndicator(inp: IndicatorInputs): IndicatorView {
-  const { fundingRate, avgFunding, oiChangePct } = inp;
-  // 펀딩비는 역신호: 롱이 과하게 쏠리면(펀딩 높음) 청산 위험 → 점수 차감.
-  // 기준 펀딩 0.01%(0.0001) 정상, 0.05%(0.0005)에서 포화.
+  const { fundingRate, avgFunding } = inp;
+  // 펀딩비 역신호: 롱이 과하게 쏠리면(펀딩 높음) 청산 위험 → 점수 차감.
   const blended = 0.5 * fundingRate + 0.5 * avgFunding;
-  let value = -clamp(blended / 0.0005, -1, 1);
-  // OI 급증 + 한쪽 쏠림이면 역신호 강화
-  if (Math.abs(oiChangePct) > 8) value *= 1.2;
-  value = clamp(value, -1, 1);
+  const value = -clamp(blended / MODEL_CONFIG.fundingSat, -1, 1);
 
-  const crowded = Math.abs(blended) > 0.0003;
+  const crowded = Math.abs(blended) > MODEL_CONFIG.fundingCrowded;
   return {
     key: 'funding',
     label: '펀딩',
     value,
     direction: crowded ? 'warn' : value > 0.15 ? 'up' : value < -0.15 ? 'down' : 'flat',
-    detail: `펀딩 ${(blended * 100).toFixed(3)}% · OI ${oiChangePct >= 0 ? '+' : ''}${oiChangePct.toFixed(1)}%`,
+    detail: `펀딩 ${(blended * 100).toFixed(3)}%`,
   };
 }
 
 function sentimentIndicator(inp: IndicatorInputs): IndicatorView {
-  const { fearGreed, isBitcoin, dominanceChange } = inp;
+  const { fearGreed } = inp;
   // 공포·탐욕은 극단에서 평균회귀(역신호): 극공포→롱(+), 극탐욕→숏(-).
-  const fgScore = clamp((50 - fearGreed) / 50, -1, 1);
-  // 도미넌스 상승은 알트에 불리, BTC에 유리. ±5%에서 포화, 소폭 반영.
-  const domTilt = clamp(dominanceChange / 5, -1, 1) * (isBitcoin ? 0.25 : -0.25);
-  const value = clamp(0.8 * fgScore + domTilt, -1, 1);
+  const value = clamp((50 - fearGreed) / MODEL_CONFIG.fgSat, -1, 1);
 
   return {
     key: 'sentiment',
@@ -263,12 +269,12 @@ function flowIndicator(inp: IndicatorInputs): IndicatorView {
     takerBuyRatios.length > 0
       ? takerBuyRatios.reduce((a, b) => a + b, 0) / takerBuyRatios.length
       : 0.5;
-  // 0.5 기준 매수/매도 압력. ±0.08 (42%~58%)에서 포화.
-  const value = clamp((avg - 0.5) / 0.08, -1, 1);
+  // 테이커 매수/매도 압력. 온체인 순입출금이 아니라 선물 체결 기준 압력임에 주의.
+  const value = clamp((avg - 0.5) / MODEL_CONFIG.flowSat, -1, 1);
 
   return {
     key: 'flow',
-    label: '흐름',
+    label: '매수압력',
     value,
     direction: value > 0.15 ? 'up' : value < -0.15 ? 'down' : 'flat',
     detail: `테이커 매수 ${(avg * 100).toFixed(1)}%`,
@@ -288,50 +294,47 @@ function biasFromScore(score: number, th: Thresholds): Bias {
 function computeInvalidation(inp: IndicatorInputs, score: number): number | null {
   const { highs, lows } = inp;
   if (highs.length < 7 || lows.length < 7) return null;
-  if (score > 0) {
-    // 롱 시나리오: 최근 7봉 저점 이탈 시 무효화
-    return Math.min(...lows.slice(-7));
-  }
-  if (score < 0) {
-    // 숏 시나리오: 최근 7봉 고점 돌파 시 무효화
-    return Math.max(...highs.slice(-7));
-  }
+  if (score > 0) return Math.min(...lows.slice(-7));
+  if (score < 0) return Math.max(...highs.slice(-7));
   return null;
+}
+
+// 레짐 필터: 추세가 강할 때, 추세에 "맞서는" 역신호(펀딩·심리)만 감쇠한다.
+// (강세장에서 펀딩이 수개월 양수로 유지되는 식의 오신호를 줄임)
+function dampenAgainstTrend(ind: IndicatorView, trendValue: number): IndicatorView {
+  const opposes = Math.sign(ind.value) !== 0 && Math.sign(ind.value) !== Math.sign(trendValue);
+  if (!opposes) return ind;
+  const factor = 1 - MODEL_CONFIG.regimeDampMax * Math.abs(trendValue);
+  return { ...ind, value: ind.value * factor };
 }
 
 export function computeForecast(inp: IndicatorInputs, opts: ForecastOptions = {}): ForecastResult {
   const weights = opts.weights ?? PRESETS[DEFAULT_PRESET].weights;
   const thresholds = opts.thresholds ?? PRESETS[DEFAULT_PRESET].thresholds;
 
-  const indicators: IndicatorView[] = [
-    trendIndicator(inp),
-    momentumIndicator(inp),
-    fundingIndicator(inp),
-    sentimentIndicator(inp),
-    flowIndicator(inp),
-  ];
+  const trend = trendIndicator(inp);
+  const momentum = momentumIndicator(inp);
+  const funding = dampenAgainstTrend(fundingIndicator(inp), trend.value);
+  const sentiment = dampenAgainstTrend(sentimentIndicator(inp), trend.value);
+  const flow = flowIndicator(inp);
+  const indicators: IndicatorView[] = [trend, momentum, funding, sentiment, flow];
 
   const raw = indicators.reduce((acc, ind) => acc + weights[ind.key] * ind.value, 0);
   const score = Math.round(clamp(raw * 100, -100, 100));
   const bias = biasFromScore(score, thresholds);
 
-  // 신뢰도 = 합의도(같은 방향 지표 가중치 합) + 점수 강도.
-  // 의도적으로 보수적(주로 50~75) — 1주 예측의 한계를 UI에 반영.
+  // 확신도(서수, 확률 아님): 합성 방향과 같은 부호인 지표 수 + 점수 강도.
   const dir = Math.sign(score);
   const agree =
-    dir === 0
-      ? 0
-      : indicators.reduce(
-          (a, ind) => a + (Math.sign(ind.value) === dir ? weights[ind.key] : 0),
-          0,
-        );
-  const strength = clamp(Math.abs(score) / 60, 0, 1);
-  const confidence = clamp(Math.round(35 + agree * 45 + strength * 20), 5, 95);
+    dir === 0 ? 0 : indicators.filter((ind) => Math.sign(ind.value) === dir).length;
+  const absScore = Math.abs(score);
+  const strength: Strength =
+    bias === 'NEUTRAL' || absScore < 25 ? 'low' : absScore < 50 ? 'med' : 'high';
 
   return {
     bias,
     score,
-    confidence: bias === 'NEUTRAL' ? Math.min(confidence, 45) : confidence,
+    conviction: { agree, total: indicators.length, strength },
     horizonDays: HORIZON_DAYS,
     indicators,
     invalidation: computeInvalidation(inp, score),
