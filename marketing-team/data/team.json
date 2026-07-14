@@ -1,6 +1,6 @@
 {
   "campaign": "휴대용 선풍기 캠페인",
-  "updatedISO": "2026-07-14T04:26:28.996Z",
+  "updatedISO": "2026-07-14T04:58:42.063Z",
   "employees": [
     {
       "icon": "📋",
@@ -30,8 +30,8 @@
       "status": "good",
       "statusLabel": "완료",
       "duty": "상세페이지 판매 문구",
-      "output": "쿠팡 상세페이지 카피(헤드라인·이득·걱정해소)",
-      "metric": "헤드라인 3안 · 제목 3안"
+      "output": "BLDC 3-in-1 겸용 상세페이지 카피 (선정 1위)",
+      "metric": "헤드라인 3안 · 이득 3 · 걱정해소 3"
     },
     {
       "icon": "📣",
@@ -40,8 +40,8 @@
       "status": "good",
       "statusLabel": "완료",
       "duty": "광고 크리에이티브",
-      "output": "인스타 광고 5앵글 + 영상 콘셉트 3",
-      "metric": "앵글 5 · 영상 훅 3"
+      "output": "BLDC 겸용 광고 4앵글 (저소음·파워뱅크·겸용·비교)",
+      "metric": "앵글 4"
     },
     {
       "icon": "🎨",
