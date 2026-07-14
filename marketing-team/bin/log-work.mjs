@@ -23,6 +23,7 @@ const FILE = join(TEAM_DIR, "data", "team.json");
 
 const CODE_TO_PIPE = {
   "product-marketing": "전략 기획",
+  "product-discovery": "상품 발굴",
   "product-selection": "우수상품 선정",
   "copywriting": "카피",
   "ad-creative": "광고",
