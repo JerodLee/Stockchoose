@@ -45,19 +45,13 @@
   body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px 64px; }
 
-  header {
-    position: sticky; top: 0; z-index: 10;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(10px); border-bottom: 1px solid var(--border);
-  }
+  header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
   .head-inner { max-width: 1120px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .brand { display: flex; align-items: center; gap: 11px; margin-right: auto; }
-  .live {
-    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
-    font-size: 11px; font-weight: 700; color: var(--good);
-    background: var(--good-soft); padding: 3px 9px; border-radius: 999px;
-  }
-  .live .beat { width: 7px; height: 7px; border-radius: 50%; background: var(--good); animation: beat 1.6s ease-in-out infinite; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .live.on { color: var(--good); background: var(--good-soft); }
+  .live.off { color: var(--idle); background: var(--idle-soft); }
+  .live .beat { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: beat 1.6s ease-in-out infinite; }
   @keyframes beat { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
   @media (prefers-reduced-motion: reduce) { .live .beat { animation: none; } }
   .brand h1 { font-size: 16px; margin: 0; letter-spacing: -.01em; font-weight: 700; }
@@ -74,8 +68,11 @@
   .tile .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 17px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; position: relative; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 17px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; position: relative; transition: border-color .3s; }
   .card.hl { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+  .card.flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0% { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } 100% {} }
+  @media (prefers-reduced-motion: reduce) { .card.flash { animation: none; } }
   .card-top { display: flex; align-items: flex-start; gap: 12px; }
   .avatar { width: 42px; height: 42px; border-radius: 12px; flex: none; display: grid; place-items: center; font-size: 21px; background: var(--surface-2); border: 1px solid var(--border); }
   .role { font-weight: 700; font-size: 14.5px; letter-spacing: -.01em; }
@@ -101,6 +98,7 @@
   .step .t { font-weight: 700; font-size: 13px; margin: 5px 0 6px; }
   .step .s { font-size: 11px; font-weight: 700; }
   .step .s.good { color: var(--good); }
+  .step .s.warn { color: var(--warn); }
   .step .s.idle { color: var(--idle); }
   .step::after { content: "›"; position: absolute; right: -7px; top: 50%; transform: translateY(-50%); color: var(--faint); font-size: 16px; z-index: 2; background: var(--bg); width: 14px; text-align: center; }
   .step:last-child::after { content: none; }
@@ -137,6 +135,7 @@
   footer { margin-top: 40px; font-size: 12px; color: var(--faint); text-align: center; line-height: 1.7; }
   .note { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 12px; margin-top: 18px; font-weight: 500; }
   .note.info { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 85%, var(--ink)); }
+  code { font-family: var(--mono); font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
 
   @media (max-width: 620px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 </style>
@@ -144,7 +143,7 @@
 <header>
   <div class="head-inner">
     <div class="brand">
-      <span class="live"><span class="beat"></span>LIVE</span>
+      <span class="live off" id="src"><span class="beat"></span><span id="src-txt">연결 중…</span></span>
       <div>
         <h1>마케팅팀 관제 대시보드</h1>
         <div class="sub" id="sub"></div>
@@ -165,98 +164,53 @@
 
   <h2 class="section" id="sel-title"></h2>
   <div class="panel">
-    <div class="panel-h">
-      <span class="tt">평가 매트릭스</span>
-      <span class="ds" id="sel-desc"></span>
-    </div>
+    <div class="panel-h"><span class="tt">평가 매트릭스</span><span class="ds" id="sel-desc"></span></div>
     <div class="tbl-scroll"><table><thead>
       <tr><th>#</th><th>상품 유형</th><th>종합 점수</th><th>판정</th></tr>
     </thead><tbody id="sel-rows"></tbody></table></div>
   </div>
   <div class="why" id="why"></div>
 
-  <div class="note info">🔌 <b>실시간 연동:</b> 이 대시보드는 상단 <code>DATA</code> 객체 하나로 전체 화면을 렌더링합니다. 각 직원이 새 작업을 마칠 때 <code>DATA</code>를 갱신(또는 API·DB에서 <code>fetch</code>)하면 카드·집계·시계가 자동 반영됩니다. 현재는 오늘 세션의 실제 작업을 담은 데이터 스냅샷입니다.</div>
+  <div class="note info">🗂️ <b>파일 기반 실시간:</b> 이 대시보드는 <code>./data/team.json</code>을 3초마다 읽어 렌더링합니다. 각 직원이 <code>bin/log-work.mjs</code>로 작업 완료를 기록하면 파일이 바뀌고 → 화면이 자동 갱신됩니다. <b>로컬에서 보려면</b> <code>npx serve marketing-team</code> 후 dashboard.html 열기. (파일 접근이 막힌 환경에선 아래 내장 스냅샷으로 표시)</div>
   <div class="note">⚠️ 우수상품 점수는 시장 조사 기반 <b>상대평가</b>이며 개별 상품 실측 스펙이 아닙니다. 이미지·영상 속 스펙 문구는 실제 제품 정보로 검증하세요.</div>
 
   <footer id="foot"></footer>
 </div>
 
 <script>
-const DATA = {
-  campaign: "휴대용 선풍기 캠페인",
-  updatedISO: "2026-07-14T02:20:00+09:00",
-  employees: [
-    { icon:"📋", role:"전략기획관", code:"product-marketing", status:"idle", statusLabel:"대기",
-      duty:"제품·타깃 포지셔닝 문서", output:"product-marketing.md (V1 초안)", metric:"확인 필요 4건 · 승인 대기" },
-    { icon:"🏆", role:"우수상품 선정관", code:"product-selection", status:"good", statusLabel:"완료", isNew:true,
-      duty:"상품 소싱 · 우수상품 선정", output:"휴대용 선풍기 6종 → 우수 3종 리포트", metric:"시장조사 4출처 · 6기준 스코어링" },
-    { icon:"✍️", role:"카피라이터", code:"copywriting", status:"good", statusLabel:"완료",
-      duty:"상세페이지 판매 문구", output:"쿠팡 상세페이지 카피(헤드라인·이득·걱정해소)", metric:"헤드라인 3안 · 제목 3안" },
-    { icon:"📣", role:"광고기획관", code:"ad-creative", status:"good", statusLabel:"완료",
-      duty:"광고 크리에이티브", output:"인스타 광고 5앵글 + 영상 콘셉트 3", metric:"앵글 5 · 영상 훅 3" },
-    { icon:"🎨", role:"이미지 디자이너", code:"image", status:"good", statusLabel:"완료",
-      duty:"비주얼 · 웹툰", output:"쿠팔툰 4컷 + 히어로 이미지 3컷", metric:"이미지 4점 생성" },
-    { icon:"🎥", role:"영상 제작자", code:"video", status:"good", statusLabel:"완료",
-      duty:"릴스·쇼츠 영상", output:"15초 릴스 구성(클립 3종: 훅·해결·제품)", metric:"3 클립 · 15초 · 9:16" },
-  ],
-  pipeline: [
-    { t:"전략 기획", s:"idle", sl:"대기 · 초안" },
-    { t:"우수상품 선정", s:"good", sl:"완료" },
-    { t:"카피", s:"good", sl:"완료" },
-    { t:"광고", s:"good", sl:"완료" },
-    { t:"이미지", s:"good", sl:"완료" },
-    { t:"영상", s:"good", sl:"완료" },
-  ],
-  selection: {
-    title:"🏆 우수상품 선정 리포트 — 휴대용 선풍기 6종",
-    desc:"6기준 가중 스코어링 · 100점 만점 · 72점 이상 우수 · 2026 시장조사 반영",
-    threshold: 72,
-    candidates: [
-      { name:"BLDC 3-in-1 겸용 (5000mAh·USB-C)", score:88.0, verdict:"win" },
-      { name:"날개없는 넥밴드 (bladeless)", score:83.0, verdict:"win" },
-      { name:"BLDC 넥밴드 (핸즈프리·4500mAh)", score:83.0, verdict:"win" },
-      { name:"무동력 냉각 넥밴드 (쿨링플레이트)", score:61.0, verdict:"out" },
-      { name:"USB 탁상 전용 선풍기", score:55.0, verdict:"out" },
-      { name:"저가 DC 핸디형 (2000~3000mAh)", score:54.0, verdict:"out" },
-    ],
-    why: [
-      { h:"🥇 BLDC 3-in-1 겸용 · 88.0", li:[
-        ["시장 트렌드 정중앙","넥/핸디/탁상+거치대 · 5000mAh 보조배터리 겸용"],
-        ["리뷰 리스크 최저","BLDC 저소음·대용량 → 클레임 구조적 감소"],
-        [null,"주의: 실용량·소음(dB)·USB-C 수치 명기(과장 mAh 금지)"] ] },
-      { h:"🥈 날개없는 넥밴드 · 83.0", li:[
-        ["차별화 최상","머리카락 안 낌·안전·저소음 → 페스티벌·자전거"],
-        ["상대적 블루오션","저가 핸디 대비 경쟁 덜함"],
-        [null,"주의: 풍량 데이터로 '약하다' 인식 정면 대응"] ] },
-      { h:"🥉 BLDC 넥밴드 · 83.0", li:[
-        ["실수요 견고","손 자유 필요 활동층(배달·조리·육아·업무)"],
-        ["BLDC 신뢰","저소음·내구로 재구매·리뷰 우호적"],
-        [null,"역할: 겸용상품의 가성비 대안 라인업"] ] },
-    ],
-  },
-};
+// Baked snapshot — used when ./data/team.json can't be fetched (file:// or Artifact CSP).
+// Kept in sync from data/team.json by bin/build.mjs.
+const FALLBACK = /*DATA_START*/{"campaign":"휴대용 선풍기 캠페인","updatedISO":"2026-07-14T04:26:28.996Z","employees":[{"icon":"📋","role":"전략기획관","code":"product-marketing","status":"warn","statusLabel":"진행중","duty":"제품·타깃 포지셔닝 문서","output":"product-marketing.md 리뷰 중 (확인필요 4건 회신 대기)","metric":"12개 섹션 · V1 검토"},{"icon":"🏆","role":"우수상품 선정관","code":"product-selection","status":"good","statusLabel":"완료","isNew":true,"duty":"상품 소싱 · 우수상품 선정","output":"휴대용 선풍기 6종 → 우수 3종 리포트","metric":"시장조사 4출처 · 6기준 스코어링"},{"icon":"✍️","role":"카피라이터","code":"copywriting","status":"good","statusLabel":"완료","duty":"상세페이지 판매 문구","output":"쿠팡 상세페이지 카피(헤드라인·이득·걱정해소)","metric":"헤드라인 3안 · 제목 3안"},{"icon":"📣","role":"광고기획관","code":"ad-creative","status":"good","statusLabel":"완료","duty":"광고 크리에이티브","output":"인스타 광고 5앵글 + 영상 콘셉트 3","metric":"앵글 5 · 영상 훅 3"},{"icon":"🎨","role":"이미지 디자이너","code":"image","status":"good","statusLabel":"완료","duty":"비주얼 · 웹툰","output":"쿠팔툰 4컷 + 히어로 이미지 3컷","metric":"이미지 4점 생성"},{"icon":"🎥","role":"영상 제작자","code":"video","status":"good","statusLabel":"완료","duty":"릴스·쇼츠 영상","output":"15초 릴스 구성(클립 3종: 훅·해결·제품)","metric":"3 클립 · 15초 · 9:16"}],"pipeline":[{"t":"전략 기획","s":"warn","sl":"진행중"},{"t":"우수상품 선정","s":"good","sl":"완료"},{"t":"카피","s":"good","sl":"완료"},{"t":"광고","s":"good","sl":"완료"},{"t":"이미지","s":"good","sl":"완료"},{"t":"영상","s":"good","sl":"완료"}],"selection":{"title":"🏆 우수상품 선정 리포트 — 휴대용 선풍기 6종","desc":"6기준 가중 스코어링 · 100점 만점 · 72점 이상 우수 · 2026 시장조사 반영","threshold":72,"candidates":[{"name":"BLDC 3-in-1 겸용 (5000mAh·USB-C)","score":88,"verdict":"win"},{"name":"날개없는 넥밴드 (bladeless)","score":83,"verdict":"win"},{"name":"BLDC 넥밴드 (핸즈프리·4500mAh)","score":83,"verdict":"win"},{"name":"무동력 냉각 넥밴드 (쿨링플레이트)","score":61,"verdict":"out"},{"name":"USB 탁상 전용 선풍기","score":55,"verdict":"out"},{"name":"저가 DC 핸디형 (2000~3000mAh)","score":54,"verdict":"out"}],"why":[{"h":"🥇 BLDC 3-in-1 겸용 · 88.0","li":[["시장 트렌드 정중앙","넥/핸디/탁상+거치대 · 5000mAh 보조배터리 겸용"],["리뷰 리스크 최저","BLDC 저소음·대용량 → 클레임 구조적 감소"],[null,"주의: 실용량·소음(dB)·USB-C 수치 명기(과장 mAh 금지)"]]},{"h":"🥈 날개없는 넥밴드 · 83.0","li":[["차별화 최상","머리카락 안 낌·안전·저소음 → 페스티벌·자전거"],["상대적 블루오션","저가 핸디 대비 경쟁 덜함"],[null,"주의: 풍량 데이터로 '약하다' 인식 정면 대응"]]},{"h":"🥉 BLDC 넥밴드 · 83.0","li":[["실수요 견고","손 자유 필요 활동층(배달·조리·육아·업무)"],["BLDC 신뢰","저소음·내구로 재구매·리뷰 우호적"],[null,"역할: 겸용상품의 가성비 대안 라인업"]]}]}}/*DATA_END*/;
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let CUR = FALLBACK;
+let prevStatus = {};
 
-function render() {
-  const d = DATA;
+function setSource(on) {
+  const el = $("#src");
+  el.className = "live " + (on ? "on" : "off");
+  $("#src-txt").textContent = on ? "LIVE · data/team.json" : "스냅샷";
+}
+
+function render(d) {
+  CUR = d;
   $("#sub").textContent = d.campaign + " · 오늘의 작업 현황";
 
   const done = d.employees.filter(e => e.status === "good").length;
   const picks = d.selection.candidates.filter(c => c.verdict === "win").length;
   const total = d.selection.candidates.length;
-  const outputs = 13;
   $("#stats").innerHTML = [
     ["가동 직원", d.employees.length, " 명"],
     ["완료 작업", done, ` / ${d.employees.length}`],
-    ["생성 산출물", outputs, " 종"],
+    ["생성 산출물", 13, " 종"],
     ["우수상품 선정", picks, ` / ${total} 후보`],
   ].map(([k,v,u]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div></div>`).join("");
 
   $("#emp-live").textContent = `· ${done}/${d.employees.length} 완료`;
-  $("#employees").innerHTML = d.employees.map(e => `
-    <div class="card${e.isNew ? " hl" : ""}">
+  $("#employees").innerHTML = d.employees.map(e => {
+    const changed = prevStatus[e.code] !== undefined && prevStatus[e.code] !== e.status;
+    return `<div class="card${e.isNew ? " hl" : ""}${changed ? " flash" : ""}">
       ${e.isNew ? '<span class="badge-new">NEW</span>' : ""}
       <div class="card-top">
         <div class="avatar">${e.icon}</div>
@@ -266,7 +220,9 @@ function render() {
       <div class="kv">담당 · <b>${esc(e.duty)}</b></div>
       <div class="out"><span class="lbl">최근 산출물</span>${esc(e.output)}</div>
       <div class="metric">${esc(e.metric)}</div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+  d.employees.forEach(e => { prevStatus[e.code] = e.status; });
 
   $("#pipe").innerHTML = d.pipeline.map((p, i) => `
     <div class="step"><div class="n">${String(i+1).padStart(2,"0")}</div>
@@ -277,7 +233,7 @@ function render() {
   $("#sel-desc").textContent = sel.desc;
   const vmap = { win:["v-win","✅ 우수"], cond:["v-cond","⚠️ 조건부"], out:["v-out","❌ 제외"] };
   $("#sel-rows").innerHTML = sel.candidates.map((c, i) => {
-    const [cls, lbl] = vmap[c.verdict];
+    const [cls, lbl] = vmap[c.verdict] || vmap.out;
     const barColor = c.verdict === "win" ? "var(--accent)" : "var(--idle)";
     return `<tr class="${c.verdict === "win" ? "win" : ""}">
       <td class="rank">${i+1}</td><td class="pname">${esc(c.name)}</td>
@@ -292,19 +248,34 @@ function render() {
     }</ul></div>`).join("");
 
   $("#foot").innerHTML = `AI 마케팅팀 관제 대시보드 · ${d.employees.length} 직원 · ${esc(d.campaign)}<br>
-    직원 = 각 스킬(업무 매뉴얼) · 데이터 스냅샷: 오늘 세션 실제 작업`;
+    직원 = 각 스킬(업무 매뉴얼) · 원본: data/team.json`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("./data/team.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("no file");
+    const d = await res.json();
+    setSource(true);
+    render(d);
+  } catch (_) {
+    setSource(false);
+    render(FALLBACK);
+  }
 }
 
 function tick() {
   const now = new Date();
-  const fmt = (dt) => dt.toLocaleTimeString("ko-KR", { hour12:false });
-  const upd = new Date(DATA.updatedISO);
+  const fmt = (dt) => dt.toLocaleTimeString("ko-KR", { hour12: false });
+  const upd = new Date(CUR.updatedISO);
   const mins = Math.max(0, Math.floor((now - upd) / 60000));
-  const ago = mins < 60 ? `${mins}분 전` : `${Math.floor(mins/60)}시간 ${mins%60}분 전`;
+  const ago = mins < 1 ? "방금" : mins < 60 ? `${mins}분 전` : `${Math.floor(mins/60)}시간 ${mins%60}분 전`;
   $("#clock").innerHTML = `현재 <b>${fmt(now)}</b> · 마지막 업데이트 ${ago}`;
 }
 
-render();
+render(FALLBACK);
+refresh();
 tick();
+setInterval(refresh, 3000);
 setInterval(tick, 1000);
 </script>
