@@ -28,6 +28,8 @@ const CODE_TO_PIPE = {
   "ad-creative": "광고",
   "image": "이미지",
   "video": "영상",
+  "review-management": "리뷰 관리",
+  "customer-support": "CS 응대",
 };
 const LABELS = { good: "완료", warn: "진행중", idle: "대기" };
 const PIPE_LABELS = { good: "완료", warn: "진행중", idle: "대기 · 초안" };
