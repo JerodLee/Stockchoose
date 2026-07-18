@@ -91,7 +91,7 @@ export default function Home() {
       </div>
 
       {/* Bottom section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 320px 220px', flex: '0 0 340px', gap: 0, borderTop: '1px solid #1c1c1c', minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 320px 220px', flex: '0 0 340px', gap: 0, borderTop: '1px solid #1c1c1c', minHeight: 0, position: 'relative', zIndex: 1, background: '#050505' }}>
         <ETFScreener />
         <TradeLog />
         <BacktestPanel />

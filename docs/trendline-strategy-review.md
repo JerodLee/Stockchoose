@@ -74,10 +74,21 @@ npm install
 npm run dev   # http://localhost:3000 → 하단 우측 "TRENDLINE PULLBACK · BACKTEST" 패널
 ```
 
+### 실데이터 연동 (라이브 fetch 레이어)
+- [x] 서버 라우트 `app/api/ohlc/route.ts` — Yahoo Finance 일봉을 받아 `Bar[]` 로 정규화
+  - 심볼 화이트리스트(SSRF 방지): 삼성전자·SK하이닉스·SPY·QQQ·BTC
+  - egress 차단/실패 시 502 → 클라이언트가 **합성 데이터(SIM)로 자동 폴백**
+- [x] `BacktestPanel` — 마운트 시 `/api/ohlc` 요청, 성공 `● LIVE` / 실패 `◐ SIM` 배지 표시
+- [x] 심볼 선택 버튼 → 종목별 실데이터 백테스트
+
+> ⚠️ **주의**: 개발 샌드박스는 외부 egress 가 조직 정책으로 차단되어 실시세 경로를
+> 여기서 검증할 수 없습니다(항상 SIM 폴백). Yahoo 접근이 가능한 **배포 환경(Render 등)
+> 에서 자동으로 LIVE** 로 동작합니다.
+
 ### 다음 단계 (선택)
-- [ ] 합성 데이터 대신 실제 일봉/분봉 API 연결 (KRX·야후 등)
-- [ ] `CandleChart`에 추세선·풀백 진입 마커 오버레이
+- [ ] `CandleChart`(메인 차트)에 추세선·풀백 진입 마커 오버레이
 - [ ] 거래비용·세금(국내 거래세/양도세) 반영 옵션
+- [ ] 실데이터 소스 다변화(KRX·Alpha Vantage 등) 및 인트라데이 타임프레임
 
 ---
 
