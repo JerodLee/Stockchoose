@@ -8,6 +8,7 @@ import AgentNetwork from './components/AgentNetwork';
 import ETFScreener from './components/ETFScreener';
 import TradeLog from './components/TradeLog';
 import SignalPanel from './components/SignalPanel';
+import BacktestPanel from './components/BacktestPanel';
 
 export default function Home() {
   return (
@@ -90,9 +91,10 @@ export default function Home() {
       </div>
 
       {/* Bottom section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 220px', flex: '0 0 220px', gap: 0, borderTop: '1px solid #1c1c1c', minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px 220px', flex: '0 0 340px', gap: 0, borderTop: '1px solid #1c1c1c', minHeight: 0 }}>
         <ETFScreener />
         <TradeLog />
+        <BacktestPanel />
         <SignalPanel />
       </div>
     </div>
