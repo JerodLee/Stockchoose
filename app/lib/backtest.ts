@@ -99,6 +99,8 @@ function ema(values: number[], period: number): number[] {
 export function runBacktest(bars: Bar[], params: BacktestParams): {
   trades: Trade[];
   stats: BacktestStats;
+  fast: number[]; // 되돌림 기준 EMA (차트 오버레이용)
+  slow: number[]; // 추세 판정 EMA
 } {
   const { emaFast, emaSlow, stopLookback, stopBuffer, rMultiple, maxHold } = params;
   const closes = bars.map((b) => b.close);
@@ -178,7 +180,7 @@ export function runBacktest(bars: Bar[], params: BacktestParams): {
     i++;
   }
 
-  return { trades, stats: computeStats(trades) };
+  return { trades, stats: computeStats(trades), fast, slow };
 }
 
 function computeStats(trades: Trade[]): BacktestStats {

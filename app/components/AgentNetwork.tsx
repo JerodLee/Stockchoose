@@ -97,7 +97,7 @@ export default function AgentNetwork() {
     edges.push({ a: bearIdx[5], b: bullIdx[8] });
 
     const CLUSTER_COLORS: Record<Node['cluster'], string> = {
-      bear: '#ff1744', bull: '#448aff', neutral: '#00e676', hub: '#333',
+      bear: '#ff1744', bull: '#448aff', neutral: '#00e676', hub: '#333333',
     };
 
     let frame = 0;

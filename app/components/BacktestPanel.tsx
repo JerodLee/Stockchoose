@@ -6,6 +6,7 @@ import {
   DEFAULT_PARAMS,
   type BacktestParams,
 } from '../lib/backtest';
+import StrategyChart from './StrategyChart';
 
 const CAPITAL = 10000; // 시작 자본 ($)
 const RISK_PCT = 0.01; // 1 트레이드당 계좌 리스크 1%
@@ -19,9 +20,10 @@ export default function BacktestPanel() {
     [rMultiple],
   );
 
-  const { stats } = useMemo(() => {
-    const bars = generateBars(900, 80000, seed);
-    return runBacktest(bars, params);
+  const { stats, bars, trades, fast, slow } = useMemo(() => {
+    const b = generateBars(900, 80000, seed);
+    const res = runBacktest(b, params);
+    return { ...res, bars: b };
   }, [seed, params]);
 
   // R 단위 성과를 $ 로 환산 (트레이드당 계좌의 RISK_PCT 만큼 리스크)
@@ -61,7 +63,7 @@ export default function BacktestPanel() {
     n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
   return (
-    <div className="panel flex flex-col h-full overflow-hidden">
+    <div className="panel flex flex-col h-full overflow-auto">
       <div className="panel-header justify-between">
         <div className="flex items-center gap-2">
           <span className="dot-green" />
@@ -162,6 +164,22 @@ export default function BacktestPanel() {
         ))}
       </div>
 
+      {/* 전략 차트: 캔들 + EMA + 진입/청산 마커 */}
+      <div className="px-2 pt-2 pb-1" style={{ borderBottom: '1px solid #1c1c1c' }}>
+        <div className="flex justify-between px-1" style={{ fontSize: 8, color: '#444', marginBottom: 2 }}>
+          <span>SETUP MAP · 캔들 + 추세선 + 진입/청산</span>
+          <span>{bars.length} bars</span>
+        </div>
+        <StrategyChart bars={bars} fast={fast} slow={slow} trades={trades} />
+        <div className="flex gap-3 px-1" style={{ fontSize: 8, color: '#555', marginTop: 3 }}>
+          <span style={{ color: '#448aff' }}>— EMA{DEFAULT_PARAMS.emaFast}</span>
+          <span style={{ color: '#ffd740' }}>— EMA{DEFAULT_PARAMS.emaSlow}</span>
+          <span style={{ color: '#00e676' }}>▲ 진입</span>
+          <span style={{ color: '#00e676' }}>● 익절</span>
+          <span style={{ color: '#ff1744' }}>● 손절</span>
+        </div>
+      </div>
+
       {/* Equity 커브 */}
       <div className="px-3 py-2" style={{ borderBottom: '1px solid #1c1c1c' }}>
         <div className="flex justify-between" style={{ fontSize: 8, color: '#444', marginBottom: 2 }}>
@@ -204,7 +222,7 @@ export default function BacktestPanel() {
       </div>
 
       {/* 컨트롤 */}
-      <div className="px-3 py-2 flex flex-col gap-2" style={{ marginTop: 'auto' }}>
+      <div className="px-3 py-2 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span style={{ color: '#444', fontSize: 9 }}>손익비 (R:R)</span>
           <div className="flex gap-1">
