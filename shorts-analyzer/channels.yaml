@@ -1,0 +1,5 @@
+# 채널 ID 직접 지정 모드: python main.py --channels channels.yaml
+# search API(100유닛/호출)를 건너뛰므로 쿼터가 크게 절약됩니다.
+channels:
+  - UCxxxxxxxxxxxxxxxxxxxxxx  # 예시: 채널 ID로 교체하세요
+  - UCyyyyyyyyyyyyyyyyyyyyyy

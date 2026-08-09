@@ -1,0 +1,24 @@
+# 숏폼 경쟁 채널 분석 파이프라인 설정
+
+# --topic 미지정 시 사용할 기본 주제 키워드
+topic: "재테크"
+
+channel_discovery:
+  max_channels: 10          # 발굴할 상위 채널 수
+  min_subscribers: 10000    # 구독자 수 최소 기준
+  recent_days: 90           # 분석 대상 기간 (일)
+  min_uploads_in_period: 5  # 기간 내 최소 쇼츠 업로드 수 (활동성 필터)
+
+videos:
+  per_channel: 10           # 채널당 수집할 조회수 상위 쇼츠 수
+  max_short_seconds: 180    # 쇼츠 판별 기준: 영상 길이 (초)
+
+outlier:
+  threshold: 3.0            # 채널 평균 조회수 대비 배수 → 이상이면 "떡상 영상"
+
+comments:
+  per_video: 50             # 떡상 영상당 수집할 댓글 수 (좋아요 순)
+
+analysis:
+  model: claude-sonnet-4-6
+  max_tokens: 16000
