@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — exclude real secrets but track examples
+# env files -- exclude real secrets but track examples
 .env
 .env.local
 .env.*.local
@@ -42,3 +42,9 @@ scanner/.env
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
