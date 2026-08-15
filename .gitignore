@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — exclude real secrets but track examples
+.env
+.env.local
+.env.*.local
+scanner/.env
 
 # vercel
 .vercel
@@ -39,3 +42,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python scanner
+scanner/__pycache__/
+scanner/modules/__pycache__/
+scanner/*.pyc
+scanner/.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+.Python
