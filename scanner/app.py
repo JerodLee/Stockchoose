@@ -333,6 +333,7 @@ with tab1:
         }
 
         df_display = pd.DataFrame(results)
+        # Keep only columns that exist
         existing = [c for c in display_cols if c in df_display.columns]
         df_display = df_display[existing].rename(columns=col_labels)
 
@@ -353,6 +354,7 @@ with tab1:
             },
         )
 
+        # CSV download
         if report_generator is not None:
             csv_data = report_generator.export_csv(st.session_state.raw_candidates)
         else:
@@ -388,6 +390,7 @@ with tab3:
         selected = st.selectbox("티커 선택", tickers_available)
 
         if selected:
+            # Find matching raw candidate
             raw_match = next((c for c in raw if c.get("ticker") == selected), None)
             fmt_match = next((r for r in results if r.get("ticker") == selected), None)
 
@@ -400,21 +403,24 @@ with tab3:
 
                 st.divider()
 
+                # Type scores breakdown
                 if raw_match and raw_match.get("scores"):
                     st.subheader("📊 유형별 점수")
                     scores: dict = raw_match["scores"]
                     for type_key, score_val in sorted(scores.items()):
+                        label = f"{type_key}"
                         try:
                             val = float(score_val)
                         except (TypeError, ValueError):
                             val = 0.0
                         st.progress(
                             min(val / 100.0, 1.0),
-                            text=f"{type_key}: {val:.1f}점",
+                            text=f"{label}: {val:.1f}점",
                         )
 
                 st.divider()
 
+                # Entry / forbidden
                 col_a, col_b = st.columns(2)
                 with col_a:
                     st.subheader("✅ 진입 조건")
@@ -425,6 +431,7 @@ with tab3:
 
                 st.divider()
 
+                # Kill-switch details
                 st.subheader("🔒 Kill-Switch 상세")
                 ks_details = fmt_match.get("kill_switch_details", {})
                 if ks_details:
@@ -435,11 +442,13 @@ with tab3:
 
                 st.divider()
 
+                # Data quality warnings
                 dq = fmt_match.get("data_quality_warnings", "")
                 if dq:
                     st.subheader("⚠️ 데이터 품질 경고")
                     st.warning(dq)
 
+                # News
                 if raw_match and raw_match.get("news"):
                     st.subheader("📰 뉴스")
                     for article in raw_match["news"][:5]:
@@ -474,10 +483,11 @@ with tab5:
     minute = now_et.minute
     total_min = hour * 60 + minute
 
-    PRE_START  = 4 * 60
-    OPEN       = 9 * 60 + 30
-    CLOSE      = 16 * 60
-    AFTER_END  = 20 * 60
+    # Session boundaries (ET)
+    PRE_START  = 4 * 60        # 04:00
+    OPEN       = 9 * 60 + 30   # 09:30
+    CLOSE      = 16 * 60       # 16:00
+    AFTER_END  = 20 * 60       # 20:00
 
     if total_min < PRE_START or total_min >= AFTER_END:
         session_label = "장외"

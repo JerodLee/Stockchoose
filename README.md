@@ -76,7 +76,7 @@ Regime | Kill-Switch 결과 | 데이터품질경고 | 뉴스요약
 ### 6대 종목 유형
 
 | 유형 | 명칭 | 핵심 지표 |
-|------|------|----------|
+|------|------|-----------|
 | TYPE_A | 저시총 숏스퀴즈형 | Short Interest, Days to Cover, Float |
 | TYPE_B | 실적 갭상승형 | EPS Surprise, Revenue Surprise |
 | TYPE_C | 바이오 임상형 | FDA 단계, PDUFA 날짜 |

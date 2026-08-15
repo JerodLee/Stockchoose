@@ -42,13 +42,3 @@ scanner/.env
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# Python scanner
-scanner/__pycache__/
-scanner/modules/__pycache__/
-scanner/*.pyc
-scanner/.pytest_cache/
-__pycache__/
-*.pyc
-*.pyo
-.Python
